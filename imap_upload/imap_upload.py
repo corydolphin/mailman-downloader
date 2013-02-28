@@ -192,8 +192,7 @@ class Progress():
         """Called when a message was processed successfully."""
         self.count += 1
         self.ok_count += 1
-        print >>sys.stderr, "OK (%d sec)" % \
-              math.ceil(time.time() - self.time_began)
+        print >>sys.stderr, "OK (%.2f sec)" % math.ceil(time.time() - self.time_began)
 
     def endNg(self, err):
         """Called when an error has occurred while processing a message."""

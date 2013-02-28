@@ -48,7 +48,7 @@ def authenticate(mailingListUrl):
 
     br.select_form(nr=0)
     br.form['username'] = 'olinlistarchive@gmail.com'#email
-    br.form['password'] = 'PASSWORD'#some funny password
+    br.form['password'] = os.environ.get('ARCHIVE_PASSWORD', "You are so scrood")#some funny password
     br.submit()
     
 
@@ -100,7 +100,7 @@ def downloadAndDecodeArchive(url,rootDir='',overWrite=True):
                 if start:
                     start = False
                 else:
-                    outMBox.write("\n")
+                    continue
                 line = line.replace(" at ", "@")
             elif line.find("From: ") == 0:
                 line = line.replace(" at ", "@")
@@ -109,6 +109,10 @@ def downloadAndDecodeArchive(url,rootDir='',overWrite=True):
                 messageid_stripped = messageid_stripped.replace('@','')
                 messageid_stripped = messageid_stripped.replace('.','')
                 line = line + "Content-Type: multipart/mixed;boundary=_000_" + messageid_stripped + "_\n"
+            elif line.find("-------------- next part --------------") == 0:  # some messages have this crap
+                continue
+            elif line.find("Skipped content of type text/") == 0:  # some messages have this crap
+                continue
             outMBox.write(line)
 
     return mboxFileName
@@ -130,7 +134,7 @@ def downloadAllArchives(mailingListUrl,rootDir,overWrite, printStatus = True):
             print url
 
 if __name__ == '__main__':
-    OVERWRITE=False
+    OVERWRITE = True
     rootDir = './Archives'
     mailingListUrls = ['https://lists.olin.edu/mailman/private/helpme/','https://lists.olin.edu/mailman/private/carpediem/']
     if not os.path.os.path.isdir(rootDir):

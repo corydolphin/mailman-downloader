@@ -1,6 +1,7 @@
 import imaplib
+import os
 mail = imaplib.IMAP4_SSL('imap.gmail.com')
-mail.login('olinlistarchive@gmail.com', 'PASSWORD')
+mail.login('olinlistarchive@gmail.com', os.envrion.get('ARCHIVE_PASSWORD', "You are so scrood"))
 print mail.list()
 
 # Out: list of "folders" aka labels in gmail.
