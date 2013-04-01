@@ -97,10 +97,6 @@ def downloadAndDecodeArchive(url,rootDir='',overWrite=True):
     with open(mboxFileName,'w') as outMBox:
         for line in br.open(url):
             if line.find("From ") == 0:
-                if start:
-                    start = False
-                else:
-                    continue
                 line = line.replace(" at ", "@")
             elif line.find("From: ") == 0:
                 line = line.replace(" at ", "@")
@@ -108,6 +104,7 @@ def downloadAndDecodeArchive(url,rootDir='',overWrite=True):
                 messageid_stripped = line[line.find('<')+1:line.rfind('>')]
                 messageid_stripped = messageid_stripped.replace('@','')
                 messageid_stripped = messageid_stripped.replace('.','')
+                messageid_stripped = messageid_stripped[0:55]
                 line = line + "Content-Type: multipart/mixed;boundary=_000_" + messageid_stripped + "_\n"
             elif line.find("-------------- next part --------------") == 0:  # some messages have this crap
                 continue
@@ -136,7 +133,7 @@ def downloadAllArchives(mailingListUrl,rootDir,overWrite, printStatus = True):
 if __name__ == '__main__':
     OVERWRITE = True
     rootDir = './Archives'
-    mailingListUrls = ['https://lists.olin.edu/mailman/private/helpme/','https://lists.olin.edu/mailman/private/carpediem/']
+    mailingListUrls = ['https://lists.olin.edu/mailman/private/carpediem/']
     if not os.path.os.path.isdir(rootDir):
         if not os.path.os.path.exists(rootDir):
             try:
