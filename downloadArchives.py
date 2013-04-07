@@ -12,7 +12,7 @@ Usage:   ./downloadArchives.py
 
 import mechanize
 import cookielib 
-import os, sys
+import os, sys, re
 from BeautifulSoup import BeautifulSoup
 # Browser
 br = mechanize.Browser()
@@ -47,7 +47,7 @@ def authenticate(mailingListUrl):
         return #already authenticated
 
     br.select_form(nr=0)
-    br.form['username'] = 'olinlistarchive@gmail.com'#email
+    br.form['username'] = os.environ.get('ARCHIVE_EMAIL', "You are so scrood") #email
     br.form['password'] = os.environ.get('ARCHIVE_PASSWORD', "You are so scrood")#some funny password
     br.submit()
     
@@ -79,7 +79,7 @@ def getArchiveUrls(mailingListUrl):
 def downloadAndDecodeArchive(url,rootDir='',overWrite=True):
 
     archiveName = url[url.rfind('/')+1:] #get last part of the url path, this is the archive name :-)
-
+    overWrote = False
     #Check that the directory exists, if not, attempt to create it
     if not os.path.os.path.isdir(rootDir):
         if not os.path.os.path.exists(rootDir):
@@ -88,14 +88,23 @@ def downloadAndDecodeArchive(url,rootDir='',overWrite=True):
                 os.mkdir(rootDir)
             except Exception as inst:
                 print inst
-
+    message_id_reg = re.compile("[^a-zA-Z0-9_]")  #multipart boundary is message id with only alphanum and underscores
     mboxFileName = os.path.join(rootDir,archiveName.replace('txt.gz','mbox'))
 
-    if not overWrite and os.path.exists(mboxFileName):
-        return False
+
+    if os.path.exists(mboxFileName):
+        if not overWrite:
+            return False
+        else:
+            overWrote = True
+
     start = True #this is to_mbox inline to reduce the need to build a new file. #TODO: make method more accessible for generic usage
     with open(mboxFileName,'w') as outMBox:
-        for line in br.open(url):
+        resp = br.open(url)  # get response object
+        lines = resp.read().splitlines()  # we actually need the full file :-(
+        lineNum = 0
+        while lineNum < len(lines):
+            line = lines[lineNum]
             if line.find("From ") == 0:
                 line = line.replace(" at ", "@")
             elif line.find("From: ") == 0:
@@ -105,14 +114,19 @@ def downloadAndDecodeArchive(url,rootDir='',overWrite=True):
                 messageid_stripped = messageid_stripped.replace('@','')
                 messageid_stripped = messageid_stripped.replace('.','')
                 messageid_stripped = messageid_stripped[0:55]
-                line = line + "Content-Type: multipart/mixed;boundary=_000_" + messageid_stripped + "_\n"
+                if lineNum +2 < len(lines) and lines[lineNum+2].find('--') ==0:
+                    boundary = lines[lineNum+2][2:]
+                    line = line +"\n" + "Content-Type: multipart/mixed;boundary=\"" + boundary + '"'
+                else:
+                    pass
             elif line.find("-------------- next part --------------") == 0:  # some messages have this crap
-                continue
+                line = None
             elif line.find("Skipped content of type text/") == 0:  # some messages have this crap
-                continue
-            outMBox.write(line)
-
-    return mboxFileName
+                line = None
+            if line != None:
+                outMBox.write(line + "\n")
+            lineNum +=1
+    return mboxFileName, overWrote
 
 def getListNameFromUrl(mailingListUrl):
     '''
@@ -126,14 +140,15 @@ def getListNameFromUrl(mailingListUrl):
 
 def downloadAllArchives(mailingListUrl,rootDir,overWrite, printStatus = True):
     for url in getArchiveUrls(mailingListUrl):
-        downloadAndDecodeArchive(url,rootDir=rootDir,overWrite=overWrite)
-        if printStatus:
-            print url
+        success, overWrote = downloadAndDecodeArchive(url,rootDir=rootDir,overWrite=overWrite)
+        if success:
+            if printStatus:
+                print "Downloaded" + [""," and overwrote"][overWrote] + " %s" % url
 
 if __name__ == '__main__':
     OVERWRITE = True
     rootDir = './Archives'
-    mailingListUrls = ['https://lists.olin.edu/mailman/private/carpediem/']
+    mailingListUrls = ['https://lists.olin.edu/mailman/private/carpediem/', 'https://lists.olin.edu/mailman/private/helpme/']
     if not os.path.os.path.isdir(rootDir):
         if not os.path.os.path.exists(rootDir):
             try:

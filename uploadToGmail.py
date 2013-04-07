@@ -21,12 +21,11 @@ if __name__ == '__main__':
 	# Prepare source and error mbox
 
 	for filName in os.listdir(root_dir):
-		src = os.path.join(root_dir,filName)
-		
-		src = mailbox.mbox(src, create=False)
+		srcPath = os.path.join(root_dir,filName)
+
+		src = mailbox.mbox(srcPath, create=False)
 		if err:
 			err = mailbox.mbox(err)
 		# Upload
-		print  "Uploading..."
+		print  "Uploading...%s" % srcPath
 		upload(uploader, src, err, time_fields)
-		
