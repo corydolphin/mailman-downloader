@@ -15,8 +15,10 @@ import unicodedata
 import urllib
 from optparse import OptionParser
 from urlparse import urlparse
+import traceback
 
 __version__ = "1.2"
+
 
 if sys.version_info < (2, 5):
     print >>sys.stderr, "IMAP Upload requires Python 2.5 or later."
@@ -69,6 +71,7 @@ class MyOptionParser(OptionParser):
                           retry=0,
                           error=None, 
                           time_fields=["from", "received", "date"])
+
     def enable_gmail(self, option, opt_str, value, parser):
         parser.values.ssl = True
         parser.values.host = "imap.gmail.com"
@@ -159,73 +162,6 @@ def left_fit_width(s, width, fill=' '):
     s += fill * (width - str_width(s))
     return s
 
-
-class Progress():
-    """Store and output progress information."""
-
-    def __init__(self, total_count):
-        self.total_count = total_count
-        self.ok_count = 0
-        self.count = 0
-        self.format = "%" + str(len(str(total_count))) + "d/" + \
-                      str(total_count) + " %5.1f %-2s  %s  "
-
-    def begin(self, msg):
-        """Called when start proccessing of a new message."""
-        self.time_began = time.time()
-        size, prefix = si_prefix(float(len(msg.as_string())), threshold=0.8)
-        sbj = self.decode_subject(msg["subject"] or "")
-        print >>sys.stderr, self.format % \
-              (self.count + 1, size, prefix + "B", left_fit_width(sbj, 30)),
-
-    def decode_subject(self, sbj):
-        decoded = []
-        try:
-            parts = email.header.decode_header(sbj)
-            for s, codec in parts:
-                decoded.append(s.decode(codec or "ascii"))
-        except Exception, e:
-            pass
-        return "".join(decoded)
-
-    def endOk(self):
-        """Called when a message was processed successfully."""
-        self.count += 1
-        self.ok_count += 1
-        print >>sys.stderr, "OK (%.2f sec)" % math.ceil(time.time() - self.time_began)
-
-    def endNg(self, err):
-        """Called when an error has occurred while processing a message."""
-        print >>sys.stderr, "NG (%s)" % err
-
-    def endAll(self):
-        """Called when all message was processed."""
-        print >>sys.stderr, "Done. (OK: %d, NG: %d)" % \
-              (self.ok_count, self.total_count - self.ok_count)
-
-
-def upload(imap, src, err, time_fields):
-    print >>sys.stderr, \
-          "Counting the mailbox (it could take a while for the large one)."
-    p = Progress(len(src))
-    for i, msg in src.iteritems():
-        try:
-            p.begin(msg)
-            r, r2 = imap.upload(msg.get_delivery_time(time_fields), 
-                                msg.as_string(), 3)
-            if r != "OK":
-                raise Exception(r2[0]) # FIXME: Should use custom class
-            p.endOk()
-            continue
-        except socket.error, e:
-            p.endNg("Socket error: " + str(e))
-        except Exception, e:
-            p.endNg(e)
-        if err is not None:
-            err.add(msg)
-    p.endAll()
-
-
 def get_delivery_time(self, fields):
     """Extract delivery time from message.
 
@@ -272,12 +208,55 @@ def get_delivery_time(self, fields):
             pass
     # All failed. Return current time.
     return time.time()
-
 # Directly attach get_delivery_time() to the mailbox.mboxMessage
 # as a method. 
 # I want to use the factory parameter of mailbox.mbox() 
 # but it seems not to work in Python 2.5.4.
 mailbox.mboxMessage.get_delivery_time = get_delivery_time
+
+class Progress():
+    """Store and output progress information."""
+
+    def __init__(self, total_count):
+        self.total_count = total_count
+        self.ok_count = 0
+        self.count = 0
+        self.format = "%" + str(len(str(total_count))) + "d/" + \
+                      str(total_count) + " %5.1f %-2s  %s  "
+
+    def begin(self, msg):
+        """Called when start proccessing of a new message."""
+        self.time_began = time.time()
+        size, prefix = si_prefix(float(len(msg.as_string())), threshold=0.8)
+        sbj = self.decode_subject(msg["subject"] or "")
+        print >>sys.stderr, self.format % \
+              (self.count + 1, size, prefix + "B", left_fit_width(sbj, 30)),
+
+    def decode_subject(self, sbj):
+        decoded = []
+        try:
+            parts = email.header.decode_header(sbj)
+            for s, codec in parts:
+                decoded.append(s.decode(codec or "ascii"))
+        except Exception, e:
+            pass
+        return "".join(decoded)
+
+    def endOk(self):
+        """Called when a message was processed successfully."""
+        self.count += 1
+        self.ok_count += 1
+        print >>sys.stderr, "OK (%.2f sec)" % (time.time() - self.time_began)
+
+    def endNg(self, err):
+        """Called when an error has occurred while processing a message."""
+        print >>sys.stderr, "NG (%s)" % err
+        traceback.print_exc()
+
+    def endAll(self):
+        """Called when all message was processed."""
+        print >>sys.stderr, "Done. (OK: %d, NG: %d)" % \
+              (self.ok_count, self.total_count - self.ok_count)
 
 
 class IMAPUploader:
@@ -319,6 +298,32 @@ class IMAPUploader:
         self.imap.shutdown()
         self.imap = None
 
+    def uploadMbox(self, src, err, time_fields=['from', 'received', 'date'], showProgess=False):
+        if showProgess:
+            p = Progress(len(src))
+        for i, msg in src.iteritems():
+            try:
+                if showProgess:
+                    p.begin(msg)
+                r, r2 = self.upload(msg.get_delivery_time(time_fields), 
+                                    msg.as_string(), 3)
+                if r != "OK":
+                    raise Exception(r2[0]) # FIXME: Should use custom class
+                if showProgess:
+                    p.endOk()
+                continue
+            except socket.error, e:
+                if showProgess:
+                    p.endNg("Socket error: " + str(e))
+            except Exception, e:
+                if showProgess:
+                   p.endNg(e)
+            if err is not None:
+                err.add(msg)
+        if showProgess:
+            p.endAll()
+
+
 
 def main(args=None):
     try:
@@ -349,8 +354,7 @@ def main(args=None):
         err = options.pop("error")
         time_fields = options.pop("time_fields")
         # Connect to the server and login
-        print >>sys.stderr, \
-              "Connecting to %s:%s." % (options["host"], options["port"])
+        print >>sys.stderr, "Connecting to %s:%s." % (options["host"], options["port"])
         uploader = IMAPUploader(**options)
         uploader.open()
         # Prepare source and error mbox
@@ -359,7 +363,7 @@ def main(args=None):
             err = mailbox.mbox(err)
         # Upload
         print >>sys.stderr, "Uploading..."
-        upload(uploader, src, err, time_fields)
+        uploader.uploadMbox(src, err, time_fields)
         return 0
     except optparse.OptParseError, e:
         print >>sys.stderr, e

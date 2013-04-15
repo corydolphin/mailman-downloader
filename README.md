@@ -26,3 +26,8 @@ optional arguments:
 The script has a number of dependencies, BeautifulSoup for parsing HTML, Mechanize for simulating a browser for login (should be refactored and replaced with requests, soon).
 You can install these dependencies simply using pip on any platform:
 ```pip install BeautifulSoup mechanize```
+
+
+`gmail_uploader.py` contains a relatively thin wrapper around `imap_upload`,a
+library which was slightly modified and improved to be more easily used as an
+external module [source](http://imap-upload.sourceforge.net/).
