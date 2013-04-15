@@ -307,8 +307,16 @@ class IMAPUploader:
                     p.begin(msg)
                 r, r2 = self.upload(msg.get_delivery_time(time_fields), 
                                     msg.as_string(), 3)
+
                 if r != "OK":
-                    raise Exception(r2[0]) # FIXME: Should use custom class
+                    if len(r2) >= 0:
+                        if r2[0] and r2[0].find("Folder doesn't exist") > -1:
+                            r ,r3 = self.imap.create(self.box)
+                            if r != "OK":
+                                print >>sys.stderr, "Failed to try and create box"
+                                raise Exception(r2[0]) # FIXME: Should use custom class
+                    else:
+                        raise Exception(r2[0]) # FIXME: Should use custom class
                 if showProgess:
                     p.endOk()
                 continue
@@ -316,6 +324,7 @@ class IMAPUploader:
                 if showProgess:
                     p.endNg("Socket error: " + str(e))
             except Exception, e:
+
                 if showProgess:
                    p.endNg(e)
             if err is not None:
